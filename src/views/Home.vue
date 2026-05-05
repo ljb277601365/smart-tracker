@@ -1,0 +1,274 @@
+<template>
+  <div class="home">
+    <div class="header">
+      <h1>智能防丢助手</h1>
+      <p class="subtitle">让出行更安心</p>
+    </div>
+
+    <div class="permission-banner" v-if="!hasPermissions">
+      <div class="permission-content">
+        <span>⚠️ 请开启定位和通知权限以正常使用</span>
+        <button @click="goToSettings" class="btn-primary">去设置</button>
+      </div>
+    </div>
+
+    <div class="status-card">
+      <div class="status-icon" :class="{ active: isTracking }">
+        {{ isTracking ? '🟢' : '🔴' }}
+      </div>
+      <div class="status-text">
+        <h3>{{ isTracking ? '行程记录中' : '未在记录' }}</h3>
+        <p v-if="currentLocation">{{ currentLocation }}</p>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <div class="action-card" @click="$router.push('/items')">
+        <span class="action-icon">🎒</span>
+        <span class="action-label">物品管理</span>
+        <span class="action-count">{{ itemStore.items.length }}件</span>
+      </div>
+      <div class="action-card" @click="$router.push('/trips')">
+        <span class="action-icon">📍</span>
+        <span class="action-label">行程记录</span>
+        <span class="action-count">{{ tripStore.trips.length }}条</span>
+      </div>
+    </div>
+
+    <div class="required-items" v-if="itemStore.requiredItems.length > 0">
+      <h3>必带物品</h3>
+      <div class="item-tags">
+        <span
+          v-for="item in itemStore.requiredItems"
+          :key="item.id"
+          class="item-tag"
+        >
+          {{ item.name }}
+        </span>
+      </div>
+    </div>
+
+    <div class="nav-bar">
+      <button class="nav-btn" @click="$router.push('/')">🏠</button>
+      <button class="nav-btn" @click="$router.push('/items')">🎒</button>
+      <button class="nav-btn" @click="$router.push('/trips')">📍</button>
+      <button class="nav-btn" @click="$router.push('/settings')">⚙️</button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useItemStore } from '../stores/items'
+import { useTripStore } from '../stores/trips'
+import { useSettingsStore } from '../stores/settings'
+import { getCurrentLocation, startLocationWatch, stopLocationWatch } from '../services/location'
+
+const router = useRouter()
+const itemStore = useItemStore()
+const tripStore = useTripStore()
+const settingsStore = useSettingsStore()
+
+const isTracking = ref(false)
+const currentLocation = ref('')
+const hasPermissions = ref(false)
+
+onMounted(async () => {
+  await itemStore.loadItems()
+  await tripStore.loadTrips()
+  await settingsStore.loadSettings()
+
+  hasPermissions.value = settingsStore.locationPermission && settingsStore.notificationPermission
+
+  if (settingsStore.locationPermission) {
+    startTracking()
+  }
+})
+
+onUnmounted(() => {
+  stopLocationWatch()
+})
+
+async function startTracking() {
+  const location = await getCurrentLocation()
+  if (location) {
+    await tripStore.startTrip(location)
+    currentLocation.value = location.address
+    isTracking.value = true
+
+    startLocationWatch(async (newLocation) => {
+      if (tripStore.currentStayId) {
+        const loc = await getCurrentLocation()
+        if (loc) {
+          await tripStore.updateTripLocation(tripStore.currentStayId, loc)
+          currentLocation.value = loc.address
+        }
+      }
+    })
+  }
+}
+
+function goToSettings() {
+  router.push('/settings')
+}
+</script>
+
+<style scoped>
+.home {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 20px;
+  padding-bottom: 80px;
+}
+
+.header {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+  margin: 0;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.permission-banner {
+  background: #fff3cd;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.permission-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #007aff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.status-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.status-icon {
+  font-size: 40px;
+}
+
+.status-text h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.status-text p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.action-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  cursor: pointer;
+}
+
+.action-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.action-label {
+  font-size: 14px;
+  color: #333;
+  display: block;
+}
+
+.action-count {
+  font-size: 12px;
+  color: #999;
+  margin-top: 5px;
+  display: block;
+}
+
+.required-items {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.required-items h3 {
+  margin: 0 0 15px;
+  font-size: 16px;
+  color: #333;
+}
+
+.item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.item-tag {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+}
+
+.nav-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+}
+</style>
