@@ -42,8 +42,8 @@ android/app/.cxx
 .cxx
 local.properties
 
-# Capacitor
-capacitor.config.json
+# Capacitor (keep android/ios but not build files)
+# capacitor.config.json - 保留这个文件
 
 # OS files
 Thumbs.db
