@@ -8,7 +8,7 @@
     <div class="permission-banner" v-if="!hasPermissions">
       <div class="permission-content">
         <span>⚠️ 请开启定位和通知权限以正常使用</span>
-        <button @click="goToSettings" class="btn-primary">去设置</button>
+        <button @click="$router.push('/settings')" class="btn-primary">去设置</button>
       </div>
     </div>
 
@@ -19,6 +19,7 @@
       <div class="status-text">
         <h3>{{ isTracking ? '行程记录中' : '未在记录' }}</h3>
         <p v-if="currentLocation">{{ currentLocation }}</p>
+        <p v-else-if="locationLoading">正在获取位置...</p>
       </div>
     </div>
 
@@ -54,16 +55,26 @@
       <button class="nav-btn" @click="$router.push('/trips')">📍</button>
       <button class="nav-btn" @click="$router.push('/settings')">⚙️</button>
     </div>
+
+    <ReminderModal 
+      v-model:show="showReminder" 
+      :items="itemStore.requiredItems"
+      @confirm="onReminderConfirm"
+      @later="onReminderLater"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useItemStore } from '../stores/items'
-import { useTripStore } from '../stores/trips'
-import { useSettingsStore } from '../stores/settings'
-import { getCurrentLocation, startLocationWatch, stopLocationWatch } from '../services/location'
+import { useItemStore } from './stores/items'
+import { useTripStore } from './stores/trips'
+import { useSettingsStore } from './stores/settings'
+import { getCurrentLocation, startLocationWatch, stopLocationWatch } from './services/location'
+import { startMotionDetection, stopMotionDetection } from './services/motion'
+import { showReminderNotification } from './services/notification'
+import ReminderModal from './components/ReminderModal.vue'
 
 const router = useRouter()
 const itemStore = useItemStore()
@@ -72,7 +83,10 @@ const settingsStore = useSettingsStore()
 
 const isTracking = ref(false)
 const currentLocation = ref('')
+const locationLoading = ref(false)
 const hasPermissions = ref(false)
+const showReminder = ref(false)
+let laterTimeout = null
 
 onMounted(async () => {
   await itemStore.loadItems()
@@ -82,16 +96,25 @@ onMounted(async () => {
   hasPermissions.value = settingsStore.locationPermission && settingsStore.notificationPermission
 
   if (settingsStore.locationPermission) {
-    startTracking()
+    await startTracking()
   }
+
+  startMotionDetection(() => {
+    triggerReminder()
+  })
 })
 
 onUnmounted(() => {
   stopLocationWatch()
+  stopMotionDetection()
+  if (laterTimeout) clearTimeout(laterTimeout)
 })
 
 async function startTracking() {
+  locationLoading.value = true
   const location = await getCurrentLocation()
+  locationLoading.value = false
+  
   if (location) {
     await tripStore.startTrip(location)
     currentLocation.value = location.address
@@ -109,8 +132,26 @@ async function startTracking() {
   }
 }
 
-function goToSettings() {
-  router.push('/settings')
+async function triggerReminder() {
+  if (itemStore.requiredItems.length === 0) return
+  
+  showReminder.value = true
+  
+  await showReminderNotification(
+    '请核对随身物品',
+    `您有 ${itemStore.requiredItems.length} 件必带物品请检查`,
+    itemStore.requiredItems
+  )
+}
+
+function onReminderConfirm() {
+  if (laterTimeout) clearTimeout(laterTimeout)
+}
+
+function onReminderLater() {
+  laterTimeout = setTimeout(() => {
+    triggerReminder()
+  }, 3 * 60 * 1000)
 }
 </script>
 

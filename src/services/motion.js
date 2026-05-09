@@ -5,7 +5,7 @@ let lastAcceleration = { x: 0, y: 0, z: 0 }
 let isStationary = false
 let stationaryStartTime = null
 const STATIONARY_THRESHOLD = 0.3
-const MIN_STATIONARY_TIME = 20 * 60 * 1000
+const MIN_STATIONARY_TIME = 3 * 60 * 1000
 
 export function startMotionDetection(onStartMoving) {
   stopMotionDetection()

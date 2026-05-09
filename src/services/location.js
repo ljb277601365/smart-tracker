@@ -15,12 +15,21 @@ export async function requestLocationPermission() {
 export async function getCurrentLocation() {
   try {
     const position = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0
     })
+    
+    const lat = position.coords.latitude
+    const lng = position.coords.longitude
+    
+    const address = await reverseGeocode(lat, lng)
+    
     return {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-      address: await reverseGeocode(position.coords.latitude, position.coords.longitude)
+      latitude: lat,
+      longitude: lng,
+      accuracy: position.coords.accuracy,
+      address: address
     }
   } catch (e) {
     console.error('Failed to get current location:', e)
@@ -31,28 +40,72 @@ export async function getCurrentLocation() {
 export async function reverseGeocode(lat, lng) {
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
-      { headers: { 'User-Agent': 'SmartTrackerApp/1.0' } }
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=zh-CN`,
+      { 
+        headers: { 
+          'User-Agent': 'SmartTrackerApp/1.0',
+          'Referer': 'https://example.com'
+        } 
+      }
     )
-    const data = await response.json()
-    if (data.address) {
-      const { city, town, village, suburb, street } = data.address
-      if (street) return street
-      if (suburb) return suburb
-      if (city || town || village) return city || town || village
+    
+    if (!response.ok) {
+      throw new Error('Geocode request failed')
     }
-    return data.display_name?.substring(0, 30) || '未知位置'
+    
+    const data = await response.json()
+    
+    if (data.address) {
+      const addr = data.address
+      
+      if (addr.road) {
+        let parts = []
+        if (addr.house_number) parts.push(addr.house_number)
+        parts.push(addr.road)
+        if (addr.suburb) parts.push(addr.suburb)
+        if (addr.neighbourhood) parts.push(addr.neighbourhood)
+        if (addr.village) parts.push(addr.village)
+        if (addr.town) parts.push(addr.town)
+        
+        if (parts.length > 0) {
+          return parts.join(' · ')
+        }
+      }
+      
+      if (addr.pedestrian) return addr.pedestrian
+      if (addr.footway) return addr.footway
+      if (addr.highway) return addr.highway
+      
+      let displayName = data.display_name || ''
+      
+      const parts = displayName.split(',').map(p => p.trim()).filter(p => p.length > 0)
+      if (parts.length >= 3) {
+        return parts.slice(0, 4).join(' · ')
+      }
+      
+      return displayName.substring(0, 60)
+    }
+    
+    if (data.display_name) {
+      return data.display_name.substring(0, 60)
+    }
+    
+    return `位置 ${lat.toFixed(6)}, ${lng.toFixed(6)}`
   } catch (e) {
     console.error('Reverse geocode failed:', e)
-    return '未知位置'
+    return `坐标 ${lat.toFixed(6)}, ${lng.toFixed(6)}`
   }
 }
 
 export function startLocationWatch(callback) {
   stopLocationWatch()
   watchId = Geolocation.watchPosition(
-    { enableHighAccuracy: true, timeout: 10000 },
-    (position, err) => {
+    { 
+      enableHighAccuracy: true, 
+      timeout: 15000,
+      maximumAge: 0
+    },
+    async (position, err) => {
       if (err) {
         console.error('Watch position error:', err)
         return
@@ -60,7 +113,8 @@ export function startLocationWatch(callback) {
       if (position) {
         callback({
           latitude: position.coords.latitude,
-          longitude: position.coords.longitude
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy
         })
       }
     }
