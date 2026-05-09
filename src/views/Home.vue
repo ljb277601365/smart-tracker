@@ -68,13 +68,13 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useItemStore } from './stores/items'
-import { useTripStore } from './stores/trips'
-import { useSettingsStore } from './stores/settings'
-import { getCurrentLocation, startLocationWatch, stopLocationWatch } from './services/location'
-import { startMotionDetection, stopMotionDetection } from './services/motion'
-import { showReminderNotification } from './services/notification'
-import ReminderModal from './components/ReminderModal.vue'
+import { useItemStore } from '../stores/items'
+import { useTripStore } from '../stores/trips'
+import { useSettingsStore } from '../stores/settings'
+import { getCurrentLocation, startLocationWatch, stopLocationWatch } from '../services/location'
+import { startMotionDetection, stopMotionDetection } from '../services/motion'
+import { showReminderNotification } from '../services/notification'
+import ReminderModal from '../components/ReminderModal.vue'
 
 const router = useRouter()
 const itemStore = useItemStore()
