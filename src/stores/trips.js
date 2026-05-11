@@ -1,13 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return R * c
+}
+
 export const useTripStore = defineStore('trips', () => {
   const trips = ref([])
-  const isTracking = ref(false)
-  const currentStayId = ref(null)
+  const pendingStay = ref(null)
 
   const TRIPS_KEY = 'smart_tracker_trips'
   const MAX_TRIPS_DAYS = 7
+  const NEW_STAY_DISTANCE_THRESHOLD = 500
+  const MIN_STAY_DURATION_TO_SAVE = 10 * 60 * 1000
 
   function loadTrips() {
     try {
@@ -35,40 +51,66 @@ export const useTripStore = defineStore('trips', () => {
     trips.value = trips.value.filter(trip => new Date(trip.startTime) > cutoffDate)
   }
 
-  function startTrip(location) {
-    const trip = {
-      id: Date.now().toString(),
-      startTime: new Date().toISOString(),
-      endTime: null,
-      location: location.address || location.name || '未知位置',
-      latitude: location.latitude,
-      longitude: location.longitude,
-      duration: 0
+  function confirmPendingStay() {
+    if (!pendingStay.value) return
+
+    const duration = Date.now() - pendingStay.value.startTimestamp
+    if (duration >= MIN_STAY_DURATION_TO_SAVE) {
+      const trip = {
+        id: Date.now().toString(),
+        startTime: new Date(pendingStay.value.startTimestamp).toISOString(),
+        endTime: new Date().toISOString(),
+        location: pendingStay.value.address,
+        latitude: pendingStay.value.latitude,
+        longitude: pendingStay.value.longitude,
+        duration: Math.round(duration / 60000)
+      }
+      trips.value.push(trip)
+      saveTrips()
+      console.log('[TripStore] 确认保存停留点:', trip)
     }
-    trips.value.push(trip)
-    currentStayId.value = trip.id
-    saveTrips()
-    return trip
+    pendingStay.value = null
   }
 
-  function endTrip(tripId) {
-    const trip = trips.value.find(t => t.id === tripId)
-    if (trip) {
-      trip.endTime = new Date().toISOString()
-      trip.duration = Math.round((new Date(trip.endTime) - new Date(trip.startTime)) / 60000)
-      currentStayId.value = null
-      saveTrips()
+  function updateOrCreateStay(location) {
+    if (!pendingStay.value) {
+      pendingStay.value = {
+        startTimestamp: Date.now(),
+        address: location.address || '未知位置',
+        latitude: location.latitude,
+        longitude: location.longitude
+      }
+      console.log('[TripStore] 开始新的待确认停留点')
+      return
+    }
+
+    const distance = calculateDistance(
+      pendingStay.value.latitude,
+      pendingStay.value.longitude,
+      location.latitude,
+      location.longitude
+    )
+
+    console.log('[TripStore] 与当前停留点距离:', Math.round(distance), '米')
+
+    if (distance >= NEW_STAY_DISTANCE_THRESHOLD) {
+      confirmPendingStay()
+      pendingStay.value = {
+        startTimestamp: Date.now(),
+        address: location.address || '未知位置',
+        latitude: location.latitude,
+        longitude: location.longitude
+      }
+      console.log('[TripStore] 移动超过阈值，开始新的待确认停留点')
+    } else {
+      pendingStay.value.address = location.address || pendingStay.value.address
+      pendingStay.value.latitude = location.latitude
+      pendingStay.value.longitude = location.longitude
     }
   }
 
-  function updateTripLocation(tripId, location) {
-    const trip = trips.value.find(t => t.id === tripId)
-    if (trip) {
-      trip.location = location.address || location.name || trip.location
-      trip.latitude = location.latitude
-      trip.longitude = location.longitude
-      saveTrips()
-    }
+  function getAllTrips() {
+    return [...trips.value].sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
   }
 
   function getTripsByDate(date) {
@@ -83,19 +125,13 @@ export const useTripStore = defineStore('trips', () => {
     }).sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
   }
 
-  function getAllTrips() {
-    return [...trips.value].sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
-  }
-
   return {
     trips,
-    isTracking,
-    currentStayId,
+    pendingStay,
     loadTrips,
-    startTrip,
-    endTrip,
-    updateTripLocation,
-    getTripsByDate,
-    getAllTrips
+    updateOrCreateStay,
+    confirmPendingStay,
+    getAllTrips,
+    getTripsByDate
   }
 })

@@ -76,8 +76,9 @@ function editItem(item) {
 }
 
 async function toggleRequired(item) {
+  const oldRequired = item.required
   await itemStore.updateItem(item.id, item.name, !item.required)
-  showToast(item.required ? '已取消必带' : '已标记为必带', 'success')
+  showToast(oldRequired ? '已取消必带' : '已标记为必带', 'success')
 }
 
 function confirmDelete(item) {

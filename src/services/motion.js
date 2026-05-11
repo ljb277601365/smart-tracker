@@ -5,7 +5,7 @@ let isStationary = false
 let stationaryStartTime = null
 let isReadyToTrigger = false
 const STATIONARY_THRESHOLD = 0.5
-const MIN_STATIONARY_TIME = 5 * 60 * 1000
+const MIN_STATIONARY_TIME = 30 * 1000
 
 export function startMotionDetection(onStartMoving) {
   stopMotionDetection()
@@ -54,7 +54,7 @@ export function stopMotionDetection() {
 }
 
 export function isInStationaryState() {
-  return isStationary && stationaryStartTime !== null
+  return isStationary
 }
 
 export function getStationaryDuration() {

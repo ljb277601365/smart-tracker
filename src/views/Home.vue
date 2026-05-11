@@ -20,6 +20,14 @@
         <h3>{{ isTracking ? '行程记录中' : '未在记录' }}</h3>
         <p v-if="currentLocation">{{ currentLocation }}</p>
         <p v-else-if="locationLoading">正在获取位置...</p>
+        <div class="motion-status">
+          <span class="motion-badge" :class="{ moving: !isStationary && stationaryDuration === 0, stationary: isStationary }">
+            {{ isStationary ? '🧘 静止中' : '🚶 移动中' }}
+          </span>
+          <span v-if="stationaryDuration > 0" class="stationary-info">
+            ⏱️ 已静止 {{ formatStationaryTime(stationaryDuration) }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -72,7 +80,7 @@ import { useItemStore } from '../stores/items'
 import { useTripStore } from '../stores/trips'
 import { useSettingsStore } from '../stores/settings'
 import { getCurrentLocation, startLocationWatch, stopLocationWatch } from '../services/location'
-import { startMotionDetection, stopMotionDetection } from '../services/motion'
+import { startMotionDetection, stopMotionDetection, getStationaryDuration, isInStationaryState } from '../services/motion'
 import { showReminderNotification } from '../services/notification'
 import ReminderModal from '../components/ReminderModal.vue'
 
@@ -86,7 +94,20 @@ const currentLocation = ref('')
 const locationLoading = ref(false)
 const hasPermissions = ref(false)
 const showReminder = ref(false)
+const stationaryDuration = ref(0)
+const isStationary = ref(false)
 let laterTimeout = null
+let updateTimer = null
+
+function formatStationaryTime(ms) {
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) {
+    return `${seconds}秒`
+  }
+  const minutes = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${minutes}分${secs}秒`
+}
 
 onMounted(async () => {
   await itemStore.loadItems()
@@ -102,12 +123,18 @@ onMounted(async () => {
   startMotionDetection(() => {
     triggerReminder()
   })
+
+  updateTimer = setInterval(() => {
+    stationaryDuration.value = getStationaryDuration()
+    isStationary.value = isInStationaryState()
+  }, 1000)
 })
 
 onUnmounted(() => {
   stopLocationWatch()
   stopMotionDetection()
   if (laterTimeout) clearTimeout(laterTimeout)
+  if (updateTimer) clearInterval(updateTimer)
 })
 
 async function startTracking() {
@@ -116,17 +143,15 @@ async function startTracking() {
   locationLoading.value = false
   
   if (location) {
-    await tripStore.startTrip(location)
+    tripStore.updateOrCreateStay(location)
     currentLocation.value = location.address
     isTracking.value = true
 
     startLocationWatch(async (newLocation) => {
-      if (tripStore.currentStayId) {
-        const loc = await getCurrentLocation()
-        if (loc) {
-          await tripStore.updateTripLocation(tripStore.currentStayId, loc)
-          currentLocation.value = loc.address
-        }
+      const loc = await getCurrentLocation()
+      if (loc) {
+        tripStore.updateOrCreateStay(loc)
+        currentLocation.value = loc.address
       }
     })
   }
@@ -229,6 +254,41 @@ function onReminderLater() {
   margin: 5px 0 0;
   font-size: 12px;
   color: #666;
+}
+
+.motion-status {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.motion-badge {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.motion-badge.moving {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.motion-badge.stationary {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.stationary-info {
+  font-size: 14px;
+  color: #007aff;
+  font-weight: 500;
+  background: #e3f2fd;
+  padding: 6px 12px;
+  border-radius: 8px;
+  display: inline-block;
 }
 
 .quick-actions {
