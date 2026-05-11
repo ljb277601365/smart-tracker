@@ -1,14 +1,15 @@
 import { Motion } from '@capacitor/motion'
 
-let lastAcceleration = { x: 0, y: 0, z: 0 }
+let lastAccelerationMagnitude = 0
 let isStationary = false
 let stationaryStartTime = null
 let isReadyToTrigger = false
 let consecutiveMoveCount = 0
 
-const STATIONARY_THRESHOLD = 0.5
+const STATIONARY_MAGNITUDE_CHANGE_THRESHOLD = 2.0
+const MOVE_MAGNITUDE_CHANGE_THRESHOLD = 3.0
 const MIN_STATIONARY_TIME = 30 * 1000
-const REQUIRED_MOVE_COUNT_TO_TRIGGER = 5
+const REQUIRED_MOVE_COUNT_TO_TRIGGER = 3
 
 export function startMotionDetection(onStartMoving) {
   stopMotionDetection()
@@ -16,33 +17,29 @@ export function startMotionDetection(onStartMoving) {
 
   Motion.addListener('accel', (event) => {
     const { x, y, z } = event.acceleration
-    const deltaX = Math.abs(x - lastAcceleration.x)
-    const deltaY = Math.abs(y - lastAcceleration.y)
-    const deltaZ = Math.abs(z - lastAcceleration.z)
-    const totalDelta = deltaX + deltaY + deltaZ
+    const magnitude = Math.sqrt(x * x + y * y + z * z)
+    const magnitudeDelta = Math.abs(magnitude - lastAccelerationMagnitude)
 
-    if (totalDelta < STATIONARY_THRESHOLD) {
-      consecutiveMoveCount = 0
-      
-      if (!isStationary) {
-        isStationary = true
-        if (!stationaryStartTime) {
-          stationaryStartTime = Date.now()
-        }
-        console.log('[Motion] 检测到设备开始静止')
-      } else {
-        const stationaryDuration = Date.now() - stationaryStartTime
-        if (stationaryDuration >= MIN_STATIONARY_TIME && !isReadyToTrigger) {
-          isReadyToTrigger = true
-          console.log('[Motion] 设备静止时间已超过阈值，准备触发提醒')
-        }
+    if (!isStationary && magnitudeDelta < STATIONARY_MAGNITUDE_CHANGE_THRESHOLD) {
+      isStationary = true
+      stationaryStartTime = Date.now()
+      console.log('[Motion] 检测到设备开始静止')
+    }
+
+    if (isStationary) {
+      const stationaryDuration = Date.now() - stationaryStartTime
+      if (stationaryDuration >= MIN_STATIONARY_TIME && !isReadyToTrigger) {
+        isReadyToTrigger = true
+        console.log('[Motion] 设备静止满30秒，准备好触发提醒')
       }
-    } else {
-      consecutiveMoveCount++
-      console.log('[Motion] 检测到移动帧，连续移动计数:', consecutiveMoveCount)
+    }
 
-      if (isReadyToTrigger && consecutiveMoveCount >= REQUIRED_MOVE_COUNT_TO_TRIGGER) {
-        console.log('[Motion] 确认稳定移动，触发提醒！')
+    if (isReadyToTrigger && magnitudeDelta >= MOVE_MAGNITUDE_CHANGE_THRESHOLD) {
+      consecutiveMoveCount++
+      console.log('[Motion] 检测到有效移动帧，计数', consecutiveMoveCount)
+
+      if (consecutiveMoveCount >= REQUIRED_MOVE_COUNT_TO_TRIGGER) {
+        console.log('[Motion] 连续3次有效移动！触发提醒！！')
         onStartMoving()
         isReadyToTrigger = false
         isStationary = false
@@ -51,7 +48,11 @@ export function startMotionDetection(onStartMoving) {
       }
     }
 
-    lastAcceleration = { x, y, z }
+    if (isStationary && magnitudeDelta < STATIONARY_MAGNITUDE_CHANGE_THRESHOLD) {
+      consecutiveMoveCount = 0
+    }
+
+    lastAccelerationMagnitude = magnitude
   })
 }
 
