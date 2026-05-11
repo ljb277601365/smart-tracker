@@ -1,14 +1,15 @@
 import { Motion } from '@capacitor/motion'
 
-let accelerometerHandler = null
 let lastAcceleration = { x: 0, y: 0, z: 0 }
 let isStationary = false
 let stationaryStartTime = null
-const STATIONARY_THRESHOLD = 0.3
-const MIN_STATIONARY_TIME = 3 * 60 * 1000
+let isReadyToTrigger = false
+const STATIONARY_THRESHOLD = 0.5
+const MIN_STATIONARY_TIME = 5 * 60 * 1000
 
 export function startMotionDetection(onStartMoving) {
   stopMotionDetection()
+  console.log('[Motion] 运动检测已启动')
 
   Motion.addListener('accel', (event) => {
     const { x, y, z } = event.acceleration
@@ -21,23 +22,20 @@ export function startMotionDetection(onStartMoving) {
       if (!isStationary) {
         isStationary = true
         stationaryStartTime = Date.now()
+        console.log('[Motion] 检测到设备开始静止')
       } else {
         const stationaryDuration = Date.now() - stationaryStartTime
-        if (stationaryDuration >= MIN_STATIONARY_TIME) {
-          if (accelerometerHandler) {
-            accelerometerHandler.isReadyToTrigger = true
-          }
+        if (stationaryDuration >= MIN_STATIONARY_TIME && !isReadyToTrigger) {
+          isReadyToTrigger = true
+          console.log('[Motion] 设备静止时间已超过阈值，准备触发提醒')
         }
       }
     } else {
-      if (isStationary && stationaryStartTime) {
+      if (isStationary && stationaryStartTime && isReadyToTrigger) {
         const stationaryDuration = Date.now() - stationaryStartTime
-        if (stationaryDuration >= MIN_STATIONARY_TIME) {
-          if (accelerometerHandler?.isReadyToTrigger) {
-            onStartMoving()
-            accelerometerHandler.isReadyToTrigger = false
-          }
-        }
+        console.log('[Motion] 检测到移动！静止时长:', stationaryDuration, 'ms')
+        onStartMoving()
+        isReadyToTrigger = false
       }
       isStationary = false
       stationaryStartTime = null
@@ -48,12 +46,11 @@ export function startMotionDetection(onStartMoving) {
 }
 
 export function stopMotionDetection() {
-  if (accelerometerHandler) {
-    Motion.removeAllListeners()
-    accelerometerHandler = null
-  }
+  Motion.removeAllListeners()
   isStationary = false
   stationaryStartTime = null
+  isReadyToTrigger = false
+  console.log('[Motion] 运动检测已停止')
 }
 
 export function isInStationaryState() {
