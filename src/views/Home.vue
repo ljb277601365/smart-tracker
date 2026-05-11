@@ -28,6 +28,11 @@
             ⏱️ 已静止 {{ formatStationaryTime(stationaryDuration) }}
           </span>
         </div>
+        <div class="accel-display">
+          <span class="accel-item">X: {{ accelData.x.toFixed(2) }}</span>
+          <span class="accel-item">Y: {{ accelData.y.toFixed(2) }}</span>
+          <span class="accel-item">Z: {{ accelData.z.toFixed(2) }}</span>
+        </div>
       </div>
     </div>
 
@@ -57,6 +62,17 @@
       </div>
     </div>
 
+    <div class="debug-panel" v-if="isDebugMode">
+      <div class="debug-header">
+        <span class="debug-title">📋 运动检测调试日志</span>
+        <button class="debug-clear" @click="debugLogs = []">清空</button>
+      </div>
+      <div class="debug-content">
+        <div v-for="(log, i) in debugLogs" :key="i" class="debug-line">{{ log }}</div>
+        <div v-if="debugLogs.length === 0" class="debug-empty">等待日志...</div>
+      </div>
+    </div>
+
     <div class="nav-bar">
       <button class="nav-btn" @click="$router.push('/')">🏠</button>
       <button class="nav-btn" @click="$router.push('/items')">🎒</button>
@@ -80,7 +96,7 @@ import { useItemStore } from '../stores/items'
 import { useTripStore } from '../stores/trips'
 import { useSettingsStore } from '../stores/settings'
 import { getCurrentLocation, startLocationWatch, stopLocationWatch } from '../services/location'
-import { startMotionDetection, stopMotionDetection, getStationaryDuration, isInStationaryState } from '../services/motion'
+import { startMotionDetection, stopMotionDetection, getStationaryDuration, isInStationaryState, setDebugLogCallback, setAccelUpdateCallback } from '../services/motion'
 import { showReminderNotification } from '../services/notification'
 import ReminderModal from '../components/ReminderModal.vue'
 
@@ -96,6 +112,9 @@ const hasPermissions = ref(false)
 const showReminder = ref(false)
 const stationaryDuration = ref(0)
 const isStationary = ref(false)
+const debugLogs = ref([])
+const isDebugMode = ref(true)
+const accelData = ref({ x: 0, y: 0, z: 0 })
 let laterTimeout = null
 let updateTimer = null
 
@@ -113,6 +132,18 @@ onMounted(async () => {
   await itemStore.loadItems()
   await tripStore.loadTrips()
   await settingsStore.loadSettings()
+
+  setDebugLogCallback((msg) => {
+    const time = new Date().toLocaleTimeString()
+    debugLogs.value.unshift(`[${time}] ${msg}`)
+    if (debugLogs.value.length > 30) {
+      debugLogs.value.pop()
+    }
+  })
+
+  setAccelUpdateCallback((accel) => {
+    accelData.value = accel
+  })
 
   hasPermissions.value = settingsStore.locationPermission && settingsStore.notificationPermission
 
@@ -291,6 +322,23 @@ function onReminderLater() {
   display: inline-block;
 }
 
+.accel-display {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.accel-item {
+  font-size: 13px;
+  color: #333;
+  font-weight: 600;
+  background: #f5f5f5;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
 .quick-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -371,5 +419,56 @@ function onReminderLater() {
   border: none;
   font-size: 24px;
   cursor: pointer;
+}
+
+.debug-panel {
+  background: #1e1e1e;
+  border-radius: 12px;
+  margin: 20px 0 100px 0;
+  padding: 12px;
+}
+
+.debug-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.debug-title {
+  color: #4ade80;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.debug-clear {
+  background: #374151;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.debug-content {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.debug-line {
+  color: #d1d5db;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #2a2a2a;
+  font-family: monospace;
+}
+
+.debug-empty {
+  color: #6b7280;
+  font-size: 13px;
+  padding: 12px 0;
+  text-align: center;
 }
 </style>
