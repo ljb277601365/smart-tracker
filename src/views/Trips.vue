@@ -68,10 +68,13 @@
         <h3>溯源结果</h3>
         <div class="trace-result" v-if="traceResult">
           <p><strong>物品：</strong>{{ traceResult.item.name }}</p>
-          <p><strong>最后携带时间：</strong>{{ formatDateTime(traceResult.trip.startTime) }}</p>
-          <p><strong>位置：</strong>{{ traceResult.trip.location }}</p>
+          <p><strong>最后出现时间：</strong>{{ formatDateTime(traceResult.trip.startTime) }}</p>
+          <p><strong>最后停留位置：</strong>{{ traceResult.trip.location }}</p>
+          <p style="margin-top: 12px; font-size: 13px; color: #666;">
+            💡 该位置是这件物品被标记为必带后，停留超过10分钟的最后一个地点
+          </p>
         </div>
-        <p v-else>未找到相关记录</p>
+        <p v-else>暂未找到该物品的行程记录，可能是因为该物品标记为必带后，还没有生成超过10分钟的停留行程</p>
         <button class="btn-close" @click="showTraceResult = false">关闭</button>
       </div>
     </div>
@@ -135,11 +138,11 @@ function formatDateTime(isoString) {
 }
 
 function traceItem(item) {
-  const trips = tripStore.getAllTrips()
-  if (trips.length > 0) {
+  const foundTrip = tripStore.findLastTripForItem(item.id)
+  if (foundTrip) {
     traceResult.value = {
       item,
-      trip: trips[0]
+      trip: foundTrip
     }
   } else {
     traceResult.value = null

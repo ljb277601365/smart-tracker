@@ -4,8 +4,11 @@ let lastAcceleration = { x: 0, y: 0, z: 0 }
 let isStationary = false
 let stationaryStartTime = null
 let isReadyToTrigger = false
+let consecutiveMoveCount = 0
+
 const STATIONARY_THRESHOLD = 0.5
 const MIN_STATIONARY_TIME = 30 * 1000
+const REQUIRED_MOVE_COUNT_TO_TRIGGER = 5
 
 export function startMotionDetection(onStartMoving) {
   stopMotionDetection()
@@ -19,9 +22,13 @@ export function startMotionDetection(onStartMoving) {
     const totalDelta = deltaX + deltaY + deltaZ
 
     if (totalDelta < STATIONARY_THRESHOLD) {
+      consecutiveMoveCount = 0
+      
       if (!isStationary) {
         isStationary = true
-        stationaryStartTime = Date.now()
+        if (!stationaryStartTime) {
+          stationaryStartTime = Date.now()
+        }
         console.log('[Motion] 检测到设备开始静止')
       } else {
         const stationaryDuration = Date.now() - stationaryStartTime
@@ -31,14 +38,17 @@ export function startMotionDetection(onStartMoving) {
         }
       }
     } else {
-      if (isStationary && stationaryStartTime && isReadyToTrigger) {
-        const stationaryDuration = Date.now() - stationaryStartTime
-        console.log('[Motion] 检测到移动！静止时长:', stationaryDuration, 'ms')
+      consecutiveMoveCount++
+      console.log('[Motion] 检测到移动帧，连续移动计数:', consecutiveMoveCount)
+
+      if (isReadyToTrigger && consecutiveMoveCount >= REQUIRED_MOVE_COUNT_TO_TRIGGER) {
+        console.log('[Motion] 确认稳定移动，触发提醒！')
         onStartMoving()
         isReadyToTrigger = false
+        isStationary = false
+        stationaryStartTime = null
+        consecutiveMoveCount = 0
       }
-      isStationary = false
-      stationaryStartTime = null
     }
 
     lastAcceleration = { x, y, z }
@@ -50,6 +60,7 @@ export function stopMotionDetection() {
   isStationary = false
   stationaryStartTime = null
   isReadyToTrigger = false
+  consecutiveMoveCount = 0
   console.log('[Motion] 运动检测已停止')
 }
 

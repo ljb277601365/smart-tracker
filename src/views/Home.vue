@@ -143,14 +143,14 @@ async function startTracking() {
   locationLoading.value = false
   
   if (location) {
-    tripStore.updateOrCreateStay(location)
+    tripStore.updateOrCreateStay(location, itemStore.requiredItems)
     currentLocation.value = location.address
     isTracking.value = true
 
     startLocationWatch(async (newLocation) => {
       const loc = await getCurrentLocation()
       if (loc) {
-        tripStore.updateOrCreateStay(loc)
+        tripStore.updateOrCreateStay(loc, itemStore.requiredItems)
         currentLocation.value = loc.address
       }
     })

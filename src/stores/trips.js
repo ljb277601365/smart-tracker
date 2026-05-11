@@ -51,7 +51,7 @@ export const useTripStore = defineStore('trips', () => {
     trips.value = trips.value.filter(trip => new Date(trip.startTime) > cutoffDate)
   }
 
-  function confirmPendingStay() {
+  function confirmPendingStay(currentRequiredItems = []) {
     if (!pendingStay.value) return
 
     const duration = Date.now() - pendingStay.value.startTimestamp
@@ -63,7 +63,8 @@ export const useTripStore = defineStore('trips', () => {
         location: pendingStay.value.address,
         latitude: pendingStay.value.latitude,
         longitude: pendingStay.value.longitude,
-        duration: Math.round(duration / 60000)
+        duration: Math.round(duration / 60000),
+        items: [...currentRequiredItems]
       }
       trips.value.push(trip)
       saveTrips()
@@ -72,7 +73,15 @@ export const useTripStore = defineStore('trips', () => {
     pendingStay.value = null
   }
 
-  function updateOrCreateStay(location) {
+  function findLastTripForItem(itemId) {
+    const sortedTrips = [...trips.value].sort((a, b) => new Date(b.startTime) - new Date(a.startTime))
+    return sortedTrips.find(trip => {
+      if (!trip.items || !Array.isArray(trip.items)) return false
+      return trip.items.some(item => item.id === itemId)
+    }) || null
+  }
+
+  function updateOrCreateStay(location, currentRequiredItems = []) {
     if (!pendingStay.value) {
       pendingStay.value = {
         startTimestamp: Date.now(),
@@ -94,7 +103,7 @@ export const useTripStore = defineStore('trips', () => {
     console.log('[TripStore] 与当前停留点距离:', Math.round(distance), '米')
 
     if (distance >= NEW_STAY_DISTANCE_THRESHOLD) {
-      confirmPendingStay()
+      confirmPendingStay(currentRequiredItems)
       pendingStay.value = {
         startTimestamp: Date.now(),
         address: location.address || '未知位置',
@@ -131,6 +140,7 @@ export const useTripStore = defineStore('trips', () => {
     loadTrips,
     updateOrCreateStay,
     confirmPendingStay,
+    findLastTripForItem,
     getAllTrips,
     getTripsByDate
   }
