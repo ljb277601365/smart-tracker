@@ -6,6 +6,7 @@ let stationaryStartTime = null
 let isReadyToTrigger = false
 let onDebugLog = null
 let onAccelUpdate = null
+let isInitialized = false
 
 const STATIONARY_THRESHOLD = 0.5
 const MIN_STATIONARY_TIME = 30 * 1000
@@ -34,6 +35,13 @@ export function startMotionDetection(onStartMoving) {
     if (onAccelUpdate) {
       onAccelUpdate({ x, y, z })
     }
+    
+    if (!isInitialized) {
+      lastAcceleration = { x, y, z }
+      isInitialized = true
+      return
+    }
+    
     const deltaX = Math.abs(x - lastAcceleration.x)
     const deltaY = Math.abs(y - lastAcceleration.y)
     const deltaZ = Math.abs(z - lastAcceleration.z)
@@ -55,12 +63,12 @@ export function startMotionDetection(onStartMoving) {
       }
     } else {
       addLog(`⚡ 大动作！Delta=${totalDelta.toFixed(2)}`)
+      isStationary = false
+      stationaryStartTime = null
       if (isReadyToTrigger) {
         addLog('🎉 触发提醒！！！')
         onStartMoving()
         isReadyToTrigger = false
-        isStationary = false
-        stationaryStartTime = null
       }
     }
 
@@ -70,8 +78,6 @@ export function startMotionDetection(onStartMoving) {
 
 export function stopMotionDetection() {
   Motion.removeAllListeners()
-  isStationary = false
-  stationaryStartTime = null
   isReadyToTrigger = false
   addLog('运动检测已停止')
 }
